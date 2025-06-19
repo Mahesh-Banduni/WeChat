@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  userId         String       @id @default(uuid())
+  email          String       @unique
+  password       String
+  name           String
+  createdAt      DateTime     @default(now())
+  sentInvites    Invite[]     @relation("SentInvites")
+  receivedInvites Invite[]    @relation("ReceivedInvites")
+  connectionsA   Connection[] @relation("ConnectionA")
+  connectionsB   Connection[] @relation("ConnectionB")
+  messagesSent   Message[]    @relation("MessagesSent")
+  messagesReceived Message[]  @relation("MessagesReceived")
+}
+
+model Invite {
+  inviteId          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      InviteStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+
+  sender      User     @relation("SentInvites", fields: [senderId], references: [userId])
+  receiver    User     @relation("ReceivedInvites", fields: [receiverId], references: [userId])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model Connection {
+  connectionId        String   @id @default(uuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+
+  userA     User     @relation("ConnectionA", fields: [userAId], references: [userId])
+  userB     User     @relation("ConnectionB", fields: [userBId], references: [userId])
+}
+
+model Message {
+  messageId          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  content     String
+  createdAt   DateTime @default(now())
+
+  sender      User     @relation("MessagesSent", fields: [senderId], references: [userId])
+  receiver    User     @relation("MessagesReceived", fields: [receiverId], references: [userId])
+}
