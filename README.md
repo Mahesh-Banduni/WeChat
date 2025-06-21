@@ -1,3 +1,3 @@
-### WeChat - Invite Based Chat Application 
+## WeChat - Invite Based Chat Application 
 
-# Tech Stack - Next.js, Tailwind CSS, Node.js, Express.js, Socket-io, Prisma, PostgreSQL 
+### Tech Stack - Next.js, Tailwind CSS, Node.js, Express.js, Socket-io, Prisma, PostgreSQL 
