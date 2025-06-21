@@ -15,21 +15,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use(async (req, res, next) => {
-  try {
-    if (!isSocketInitialized()) {
-      throw new Error('Socket.IO not ready');
-    }
-    req.io = getSocketInstance(); // 👈 here
-    next();
-  } catch (err) {
-    res.status(503).json({ 
-      error: "Real-time service initializing",
-      message: err.message
-    });
-  }
-});
-
 app.get('/health', (req, res) => {
   res.json({ status: 'API is running' });
 });

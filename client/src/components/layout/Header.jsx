@@ -1,7 +1,7 @@
 // src/components/layout/Header.jsx
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Menu, Bell, Search, Settings, LogOut, User, ChevronDown } from 'lucide-react';
 import useAuth from '@/hooks/useAuth';
 
@@ -9,19 +9,51 @@ export default function Header({ user, onMenuClick }) {
   const { logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isSearchCollapsed, setIsSearchCollapsed] = useState(false);
 
-  const toggleUserMenu = () => {
-    setIsUserMenuOpen(!isUserMenuOpen);
-  };
+  const userMenuRef = useRef(null);
+  const notificationRef = useRef(null);
+  const searchButtonRef = useRef(null);
+  const mobileSearchRef = useRef(null);
 
-  const toggleNotifications = () => {
-    setIsNotificationOpen(!isNotificationOpen);
-  };
+  const toggleUserMenu = () => setIsUserMenuOpen((prev) => !prev);
+  const toggleNotifications = () => setIsNotificationOpen((prev) => !prev);
 
   const handleLogout = () => {
     logout();
     setIsUserMenuOpen(false);
   };
+
+  const handleClickOutside = (event) => {
+    if (
+      userMenuRef.current &&
+      !userMenuRef.current.contains(event.target)
+    ) {
+      setIsUserMenuOpen(false);
+    }
+
+    if (
+      notificationRef.current &&
+      !notificationRef.current.contains(event.target)
+    ) {
+      setIsNotificationOpen(false);
+    }
+
+    if (
+      isSearchCollapsed &&
+      mobileSearchRef.current &&
+      !mobileSearchRef.current.contains(event.target) &&
+      searchButtonRef.current &&
+      !searchButtonRef.current.contains(event.target)
+    ) {
+      setIsSearchCollapsed(false);
+    }
+  };
+
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isSearchCollapsed]);
 
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
@@ -40,17 +72,17 @@ export default function Header({ user, onMenuClick }) {
           {/* Logo/Title */}
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">CH</span>
+              <span className="text-white font-bold text-sm">WC</span>
             </div>
-            <div className="hidden sm:block">
-              <h1 className="text-xl font-bold text-gray-900">Chat Hub</h1>
-              <p className="text-xs text-gray-500 hidden lg:block">Professional Communication</p>
+            <div className="block">
+              <h1 className="text-xl font-bold text-gray-900">WeChat</h1>
+              <p className="text-xs text-gray-500 hidden lg:block">Talk. Connect. Built for Conversations That Matter.</p>
             </div>
           </div>
         </div>
 
         {/* Center Section - Search (Hidden on mobile) */}
-        <div className="hidden md:flex flex-1 max-w-md mx-8">
+        {/* <div className="hidden md:flex flex-1 max-w-md mx-8">
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -59,17 +91,21 @@ export default function Header({ user, onMenuClick }) {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-        </div>
+        </div> */}
 
         {/* Right Section */}
         <div className="flex items-center space-x-2 lg:space-x-4">
           {/* Mobile Search Button */}
-          <button className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          {/* <button
+            ref={searchButtonRef}
+            onClick={() => setIsSearchCollapsed(true)}
+            className={`md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors ${isSearchCollapsed ? 'hidden' : ''}`}
+          >
             <Search className="w-5 h-5 text-gray-600" />
-          </button>
+          </button> */}
 
           {/* Notifications */}
-          <div className="relative">
+          <div className="relative" ref={notificationRef}>
             <button
               onClick={toggleNotifications}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
@@ -78,7 +114,6 @@ export default function Header({ user, onMenuClick }) {
               <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
             </button>
 
-            {/* Notifications Dropdown */}
             {isNotificationOpen && (
               <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                 <div className="p-4 border-b border-gray-200">
@@ -118,7 +153,7 @@ export default function Header({ user, onMenuClick }) {
           </div>
 
           {/* User Menu */}
-          <div className="relative">
+          <div className="relative" ref={userMenuRef}>
             <button
               onClick={toggleUserMenu}
               className="flex items-center space-x-2 lg:space-x-3 p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -133,7 +168,6 @@ export default function Header({ user, onMenuClick }) {
               <ChevronDown className="w-4 h-4 text-gray-500 hidden lg:block" />
             </button>
 
-            {/* User Dropdown */}
             {isUserMenuOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                 <div className="p-4 border-b border-gray-200">
@@ -147,7 +181,7 @@ export default function Header({ user, onMenuClick }) {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="py-2">
                   <button className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-3 text-gray-700">
                     <User className="w-4 h-4" />
@@ -158,7 +192,7 @@ export default function Header({ user, onMenuClick }) {
                     <span>Settings</span>
                   </button>
                 </div>
-                
+
                 <div className="border-t border-gray-200 py-2">
                   <button
                     onClick={handleLogout}
@@ -175,16 +209,18 @@ export default function Header({ user, onMenuClick }) {
       </div>
 
       {/* Mobile Search Bar */}
-      <div className="md:hidden px-4 pb-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search conversations..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      {/* {isSearchCollapsed && (
+        <div className="sm:hidden px-4 pb-3" ref={mobileSearchRef}>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search conversations..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
         </div>
-      </div>
+      )} */}
     </header>
   );
 }

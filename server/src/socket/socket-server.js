@@ -12,22 +12,25 @@ initializeSocket(SOCKET_PORT).then((io) => {
     console.log(`Client connected: ${socket.id}`);
 
     socket.on('join', ({ userId }) => {
+      console.log(`User ${userId} joined their room`);
       socket.join(userId);
     });
 
     socket.on('send_message', async (data) => {
-      const { senderId, receiverId, content, fromApi } = data;
+      const { senderId, receiverId, content, fromApi, message } = data;
 
-      if (fromApi) {
-        socket.to(receiverId).emit('new_message', data);
-        return;
+      if (fromApi && message) {
+        // API already saved it, just emit
+        socket.to(receiverId).emit('new_message', message);
+      } else {
+        // Save and emit (for potential fallback/internal use)
+        const savedMessage = await prisma.message.create({
+          data: { senderId, receiverId, content }
+        });
+        socket.to(receiverId).emit('new_message', savedMessage);
       }
-
-      const message = await prisma.message.create({
-        data: { senderId, receiverId, content }
-      });
-
-      socket.to(receiverId).emit('new_message', message);
     });
   });
+}).catch((err) => {
+  console.error('❌ Failed to initialize socket server:', err.message);
 });

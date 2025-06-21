@@ -4,10 +4,10 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-  "start:socket": "node src/socket/socket-server.js",
-  "start:api": "node src/index.js",
-  "start": "concurrently --kill-others-on-fail \"npm run start:socket\" \"npm run start:api\"",
-  "dev": "concurrently --kill-others-on-fail \"npm run start:socket\" \"npm run start:api\"",
+    "start:socket": "node src/socket/socket-server.js",
+    "start:api": "node src/index.js",
+    "start": "concurrently --kill-others-on-fail \"npm run start:socket\" \"npm run start:api\"",
+    "dev": "concurrently --kill-others-on-fail \"npm run start:socket\" \"npm run start:api\"",
     "lint": "eslint src/"
   },
   "keywords": [],
@@ -25,7 +25,8 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",

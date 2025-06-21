@@ -13,12 +13,22 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
-  UserPlus
+  UserPlus,
+  LogOut
 } from 'lucide-react';
+import useAuth from '@/hooks/useAuth';
 
 export default function Sidebar({ isOpen, onClose }) {
+  const { logout } = useAuth();
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    if (onClose) {
+      onClose();
+    }
+  };
 
   const toggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
@@ -32,8 +42,8 @@ export default function Sidebar({ isOpen, onClose }) {
       exact: true
     },
     {
-      label: 'Chat',
-      icon: MessageSquare,
+      label: 'Contacts',
+      icon: Users,
       href: '/dashboard/chat',
       badge: '3'
     },
@@ -43,16 +53,6 @@ export default function Sidebar({ isOpen, onClose }) {
       href: '/dashboard/invites',
       badge: '2'
     },
-    {
-      label: 'Contacts',
-      icon: Users,
-      href: '/dashboard/contacts'
-    },
-    {
-      label: 'Messages',
-      icon: Mail,
-      href: '/dashboard/messages'
-    }
   ];
 
   const bottomMenuItems = [
@@ -199,19 +199,40 @@ export default function Sidebar({ isOpen, onClose }) {
                 </Link>
               );
             })}
+
+            {/* Logout Button - Properly positioned and styled */}
+            <div className="pt-2 mt-2 border-t border-gray-200">
+              <button
+                onClick={handleLogout}
+                className={`
+                  group w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200
+                  text-red-600 hover:bg-red-50 hover:text-red-700
+                  ${isCollapsed ? 'justify-center' : ''}
+                `}
+              >
+                <LogOut className={`
+                  flex-shrink-0 transition-colors duration-200
+                  text-red-500 group-hover:text-red-600
+                  ${isCollapsed ? 'w-5 h-5' : 'w-5 h-5 mr-3'}
+                `} />
+                {!isCollapsed && (
+                  <span className="truncate">Sign out</span>
+                )}
+              </button>
+            </div>
           </div>
         </nav>
 
         {/* Sidebar Footer */}
         {!isCollapsed && (
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 border-t border-gray-200 mt-auto">
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
                   <MessageSquare className="w-4 h-4 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Chat Hub Pro</p>
+                  <p className="text-sm font-medium text-gray-900">WeChat Pro</p>
                   <p className="text-xs text-gray-500">Professional Edition</p>
                 </div>
               </div>
@@ -226,6 +247,14 @@ export default function Sidebar({ isOpen, onClose }) {
           </div>
         )}
       </div>
+
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
     </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { Users, MessageSquare, Send } from 'lucide-react';
+import { Users, MessageSquare, Send, ArrowLeft } from 'lucide-react';
 import io from 'socket.io-client';
 import api from '@/lib/api';
 import useAuth from '@/hooks/useAuth';
@@ -14,6 +14,7 @@ export default function ChatPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showChat, setShowChat] = useState(false); // Mobile view state
   const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -32,8 +33,8 @@ export default function ChatPage() {
 
     fetchConnectedUsers();
 
-    // Connect to Socket.IO server on port 8001
-    socketRef.current = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8000', {
+    // Connect to Socket.IO server on port 8080
+    socketRef.current = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8080', {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -111,6 +112,16 @@ export default function ChatPage() {
     }
   };
 
+  const handleSelectUser = (peerUser) => {
+    setSelectedUser(peerUser);
+    setShowChat(true); // Show chat on mobile
+  };
+
+  const handleBackToContacts = () => {
+    setShowChat(false);
+    setSelectedUser(null);
+  };
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedUser || isSending) return;
 
@@ -171,61 +182,135 @@ export default function ChatPage() {
   return (
     <div className="flex h-full">
       {/* Contacts Sidebar */}
-      <div className="hidden md:block w-80 border-r border-gray-200 bg-white overflow-y-auto fixed h-[calc(100vh-65px)]">
-        <div className="p-4">
-          <div className="flex items-center space-x-2 mb-4">
-            <Users className="w-5 h-5 text-gray-500" />
-            <h2 className="font-semibold text-gray-700">Contacts</h2>
-            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-              {connectedUsers.length}
-            </span>
+      <div className={`
+        w-full md:w-80 border-r border-gray-200 bg-white overflow-y-auto h-[calc(100vh-65px)]
+        md:block md:fixed
+        ${showChat ? 'hidden md:block' : 'block'}
+      `}>
+        {/* Header */}
+        <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold text-gray-900">Chats</h1>
+            {/* <div className="flex items-center space-x-1">
+              <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-1 rounded-full">
+                {connectedUsers.length} online
+              </span>
+            </div> */}
           </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="p-3 bg-white border-b border-gray-100">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search conversations..."
+              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
           
-          <div className="space-y-2">
-            {connectedUsers.map((connection) => {
-              const peerUser = connection.userA.userId !== user.userId
-                ? connection.userA
-                : connection.userB;
-              return (
-                <div
-                  key={peerUser.userId}
-                  className={`p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-50 hover:shadow-sm ${
-                    selectedUser?.userId === peerUser.userId 
-                      ? 'bg-blue-50 border-l-4 border-blue-500' 
-                      : 'border-l-4 border-transparent'
-                  }`}
-                  onClick={() => setSelectedUser(peerUser)}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-medium text-sm">
-                      {peerUser.name.charAt(0)}
+        {/* Contacts List */}
+        <div className="divide-y divide-gray-100">
+          {connectedUsers.map((connection, index) => {
+            const peerUser = connection.userA.userId !== user.userId
+              ? connection.userA
+              : connection.userB;
+            return (
+              <div
+                key={peerUser.userId}
+                className={`relative px-4 py-3 cursor-pointer transition-all duration-150 hover:bg-gray-50 active:bg-gray-100 ${
+                  selectedUser?.userId === peerUser.userId 
+                    ? 'bg-blue-50 border-r-3 border-blue-500' 
+                    : ''
+                }`}
+                onClick={() => handleSelectUser(peerUser)}
+              >
+                <div className="flex items-start space-x-3">
+                  {/* Profile Picture with Online Status */}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-base shadow-sm">
+                      {peerUser.name.charAt(0).toUpperCase()}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 truncate">{peerUser.name}</div>
-                      <div className="text-sm text-gray-500 truncate">{peerUser.email}</div>
+                    {/* Online indicator */}
+                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 border-2 border-white rounded-full"></div>
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold text-gray-900 truncate text-base">
+                        {peerUser.name}
+                      </h3>
+                      <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
+                        12:30 PM
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-600 truncate pr-2">
+                        Click to start chatting...
+                      </p>
+                      {/* Unread badge - you can conditionally show this
+                      {index === 0 && (
+                        <div className="flex-shrink-0">
+                          <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium text-white bg-blue-500 rounded-full">
+                            2
+                          </span>
+                        </div>
+                      )} */}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
+
+        {/* Empty State */}
+        {connectedUsers.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <Users className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-700 mb-2">No contacts yet</h3>
+            <p className="text-sm text-gray-500 text-center max-w-sm">
+              Your conversations will appear here once you connect with other users.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col md:ml-80 h-[calc(100vh-65px)]">
+      <div className={`
+        flex-1 flex flex-col h-[calc(100vh-65px)]
+        md:ml-80
+        ${showChat ? 'block' : 'hidden md:flex'}
+      `}>
         {/* Chat Header */}
         <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
           {selectedUser ? (
             <div className="flex items-center space-x-4">
+              {/* Back button for mobile */}
+              <button
+                onClick={handleBackToContacts}
+                className="md:hidden p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              
               <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-medium">
                 {selectedUser.name.charAt(0)}
               </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-semibold text-gray-900 truncate">
                   {selectedUser.name}
                 </h2>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-gray-500 truncate">
                   {selectedUser.email}
                 </div>
               </div>
@@ -289,7 +374,7 @@ export default function ChatPage() {
                   <div ref={messagesEndRef} />
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 px-4">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                     <MessageSquare className="w-8 h-8 text-gray-400" />
                   </div>
@@ -301,12 +386,12 @@ export default function ChatPage() {
               )}
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500">
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 px-4">
               <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
                 <MessageSquare className="w-10 h-10 text-gray-400" />
               </div>
               <h3 className="text-xl font-medium text-gray-700 mb-2">Welcome to Chat</h3>
-              <p className="text-gray-500 mb-4">
+              <p className="text-gray-500 mb-4 text-center">
                 Select a contact from the sidebar to start chatting
               </p>
             </div>
@@ -316,7 +401,7 @@ export default function ChatPage() {
         {/* Message Input */}
         <div className="bg-white border-t border-gray-200 p-4 sticky bottom-0">
           {selectedUser ? (
-            <div className="flex items-end space-x-3">
+            <div className="flex items-center space-x-3 justify-center">
               <div className="flex-1">
                 <textarea
                   value={newMessage}
@@ -329,17 +414,19 @@ export default function ChatPage() {
                   disabled={isSending}
                 />
               </div>
+              <div>
               <button
                 onClick={handleSendMessage}
                 disabled={!newMessage.trim() || isSending}
                 className={`p-3 rounded-xl transition-all duration-200 flex items-center justify-center ${
                   newMessage.trim() && !isSending
-                    ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg hover:shadow-xl'
+                    ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg hover:shadow-xl active:bg-blue-700'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
                 <Send className="w-5 h-5" />
               </button>
+              </div>
             </div>
           ) : (
             <div className="text-center text-gray-400 py-2">

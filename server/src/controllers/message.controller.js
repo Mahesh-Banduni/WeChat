@@ -1,30 +1,35 @@
-// controller.js
+// src/controllers/message.controller.js
 import messageService from "../services/message.service.js";
+import { getSocketClient } from '../socket/socket-client.js';
 
 const sendMessage = async (req, res, next) => {
   try {
     const { receiverId, content } = req.body;
     const senderId = req.user.id;
-    
-    // Save to database
+
+    // Save message to DB
     const msg = await messageService.sendMessage(senderId, receiverId, content);
-    
-    // Emit via Socket.IO with error handling
+
+    // Emit to Socket.IO server
     try {
-      req.io.emit('forward_message', {
-        ...msg,
-        fromApi: true
+      const socket = getSocketClient();
+      socket.emit('send_message', {
+        senderId,
+        receiverId,
+        content,
+        fromApi: true,
+        message: msg, // Pass full saved message
       });
-    } catch (socketError) {
-      console.error('Socket emit error:', socketError);
-      // Continue even if socket fails
+    } catch (err) {
+      console.warn('⚠️ Failed to emit via socket client:', err.message);
     }
-    
+
     res.json(msg);
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 };
+
 
 const loadMessages = async (req, res, next) => {
   try {
