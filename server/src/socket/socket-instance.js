@@ -5,7 +5,7 @@ import http from 'http';
 let io = null;
 let socketServer = null;
 
-export function initializeSocket(port) {
+export function initializeSocket(port = process.env.SOURCE_PORT || 8080) {
   return new Promise((resolve, reject) => {
     if (io) {
       console.warn('⚠️ Socket.IO already initialized');
@@ -21,7 +21,8 @@ export function initializeSocket(port) {
       }
     });
 
-    socketServer.listen(port, () => {
+    // ✅ Listen on process.env.SOURCE_PORT and bind to 0.0.0.0
+    socketServer.listen(port, '0.0.0.0', () => {
       console.log(`✅ Socket.IO server running on port ${port}`);
       resolve(io);
     });

@@ -5,7 +5,7 @@ import app from './server.js';
 
 dotenv.config();
 
-const SOCKET_URL = process.env.SOCKET_URL || 'http://localhost:8080';
+const SOCKET_URL = process.env.SOCKET_URL;
 const API_PORT = process.env.API_PORT || 8000;
 
 initSocketClient(SOCKET_URL);
