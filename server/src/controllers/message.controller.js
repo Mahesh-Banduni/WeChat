@@ -5,8 +5,21 @@ const sendMessage = async (req, res, next) => {
   try {
     const { receiverId, content } = req.body;
     const senderId = req.user.id;
+    
+    // Save to database
     const msg = await messageService.sendMessage(senderId, receiverId, content);
-    req.io.to(receiverId).emit("new_message", msg); // Push to receiver
+    
+    // Emit via Socket.IO with error handling
+    try {
+      req.io.emit('forward_message', {
+        ...msg,
+        fromApi: true
+      });
+    } catch (socketError) {
+      console.error('Socket emit error:', socketError);
+      // Continue even if socket fails
+    }
+    
     res.json(msg);
   } catch (error) {
     next(error);

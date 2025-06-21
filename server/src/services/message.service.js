@@ -5,16 +5,29 @@ import { NotFoundError, BadRequestError } from "../errors/errors.js";
 const prisma = new PrismaClient();
 
 const sendMessage = async (senderId, receiverId, content) => {
-  const user = await prisma.user.findUnique({ where: { userId: senderId } });
-  if (!user) throw new NotFoundError("User not found");
+  // Validate users exist
+  const [sender, receiver] = await Promise.all([
+    prisma.user.findUnique({ where: { userId: senderId } }),
+    prisma.user.findUnique({ where: { userId: receiverId } })
+  ]);
 
-  const msg = await prisma.message.create({
-    data: { senderId, receiverId, content },
+  if (!sender || !receiver) {
+    throw new Error("User not found");
+  }
+
+  // Create and return message
+  return await prisma.message.create({
+    data: { 
+      senderId, 
+      receiverId, 
+      content,
+      createdAt: new Date() 
+    },
+    include: {
+      sender: { select: { name: true } },
+      receiver: { select: { name: true } }
+    }
   });
-
-  if (!msg) throw new BadRequestError("Cannot send message. Please try again later.");
-
-  return msg;
 };
 
 const loadMessages = async (senderId, receiverId) => {

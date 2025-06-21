@@ -1,11 +1,13 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "main": "src/server.js",
+  "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+  "start:socket": "node src/socket/socket-server.js",
+  "start:api": "node src/index.js",
+  "start": "concurrently --kill-others-on-fail \"npm run start:socket\" \"npm run start:api\"",
+  "dev": "concurrently --kill-others-on-fail \"npm run start:socket\" \"npm run start:api\"",
     "lint": "eslint src/"
   },
   "keywords": [],
@@ -14,12 +16,15 @@
   "description": "",
   "dependencies": {
     "@prisma/client": "^6.10.1",
+    "@socket.io/postgres-adapter": "^0.4.0",
     "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
+    "concurrently": "^9.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.2",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
