@@ -32,7 +32,7 @@ const createUser = async (userData) => {
 
   const response = JWTToken.generateToken(user);
 
-  return { response, user };
+  return { response, user: {name: user.name, email: user.email}};
 };
 
 const getConnections = async (userId) => {

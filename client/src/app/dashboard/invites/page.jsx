@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { UserPlus, Mail, User, Check, Clock, Send, Users, Heart } from 'lucide-react';
 import useAuth from '@/hooks/useAuth';
 import api from '@/lib/api';
+import { errorToast } from '@/components/ui/toast';
 
 export default function InvitesPage() {
   const { user } = useAuth();
@@ -18,6 +19,7 @@ export default function InvitesPage() {
       const response = await api.get('/connection/invites');
       setInvites(response.data.result || []);
     } catch (error) {
+      //errorToast(error.response?.data?.error);
       console.error('Error fetching invites:', error);
     } finally {
       setLoading(false);
@@ -35,11 +37,17 @@ export default function InvitesPage() {
 
     try {
       setSendingInvite(true);
-      await api.post('/connection/send-invite', { email });
-      setEmail('');
-      await fetchInvites();
+      const response = await api.post('/connection/send-invite', { email });
+      if(response.status===201){
+        successToast(response?.data?.message);
+        setEmail('');
+        await fetchInvites();
+      }
+      errorToast(response?.data?.error);
     } catch (error) {
-      console.error('Error sending invite:', error);
+      errorToast(error.response?.data?.error);
+      setEmail('');
+      //console.error('Error sending invite:', error);
     } finally {
       setSendingInvite(false);
     }
@@ -47,10 +55,16 @@ export default function InvitesPage() {
 
   const handleAcceptInvite = async (inviteId) => {
     try {
-      await api.post(`/connection/accept-invite/${inviteId}`);
+      const response = await api.post(`/connection/accept-invite/${inviteId}`);
+      if(response.status===200){
+        successToast(response?.data?.message);
+        await fetchInvites();
+      }
       await fetchInvites();
+      errorToast(response?.data?.error);
     } catch (error) {
-      console.error('Error accepting invite:', error);
+      errorToast(error.response?.data?.error);
+      //console.error('Error accepting invite:', error);
     }
   };
 

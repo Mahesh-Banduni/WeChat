@@ -1,21 +1,40 @@
-import { NotFoundError, BadRequestError } from "../errors/errors.js";
+import { NotFoundError, BadRequestError, ConflictError } from "../errors/errors.js";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 const sendInvite = async(senderId, email) => {
-    console.log("sender",senderId+"  Email",email);
 
     const receiver = await prisma.user.findFirst({
         where: { email },
     });
-    console.log(receiver);
 
     if (!receiver) {
         throw new NotFoundError("User with this email does not exist");
     }
 
     const receiverId = receiver.userId; 
+    const existingInviteSent = await prisma.invite.findFirst({
+    where: { senderId, receiverId, status: "PENDING" },
+    });
+    if (existingInviteSent) {
+        throw new ConflictError("An invitation has already been sent to this user.");
+    }
+
+    const existingInviteReceived = await prisma.invite.findFirst({
+        where: { senderId: receiverId, receiverId: senderId, status: "PENDING" },
+    });
+    if (existingInviteReceived) {
+        throw new ConflictError("You have already received an invitation from this user.");
+    }
+
+    const existingInviteAccepted = await prisma.invite.findFirst({
+        where: { OR: [ {senderId, receiverId, status: "ACCEPTED" }, {senderId: receiverId, receiverId: senderId, status: "ACCEPTED"}]},
+    });
+    if (existingInviteAccepted) {
+        throw new ConflictError("User is already connected.");
+    }
+
     const invite = await prisma.invite.create({
         data: { senderId, receiverId },
     }); 

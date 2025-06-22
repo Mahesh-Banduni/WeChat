@@ -5,6 +5,7 @@ import { Users, MessageSquare, Send, ArrowLeft } from 'lucide-react';
 import io from 'socket.io-client';
 import api from '@/lib/api';
 import useAuth from '@/hooks/useAuth';
+import { format, isToday, isYesterday } from 'date-fns';
 
 export default function ChatPage() {
   const { user } = useAuth();
@@ -34,7 +35,7 @@ export default function ChatPage() {
     fetchConnectedUsers();
 
     // Connect to Socket.IO server on port 8080
-    socketRef.current = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8080', {
+    socketRef.current = io(process.env.NEXT_PUBLIC_SOCKET_URL, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -178,6 +179,30 @@ export default function ChatPage() {
   };
 
   if (!user) return null;
+
+const groupMessagesByDate = (messages) => {
+  const groups = {};
+
+  messages.forEach((msg) => {
+    const date = new Date(msg.createdAt);
+    let key;
+
+    if (isToday(date)) {
+      key = 'Today';
+    } else if (isYesterday(date)) {
+      key = 'Yesterday';
+    } else {
+      key = format(date, 'dd MMM yyyy');
+    }
+
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(msg);
+  });
+
+  return groups;
+};
 
   return (
     <div className="flex h-full">
@@ -340,37 +365,52 @@ export default function ChatPage() {
                 </div>
               ) : messages.length > 0 ? (
                 <div className="p-4 space-y-4">
-                  {messages.map((msg) => (
-                    <div
-                      key={msg.messageId}
-                      className={`flex ${msg.senderId === user.userId ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div className={`flex items-end space-x-2 max-w-xs sm:max-w-md lg:max-w-lg ${
-                        msg.senderId === user.userId ? 'flex-row-reverse space-x-reverse' : ''
-                      }`}>
-                        <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white font-medium text-xs">
-                          {msg.senderId === user.userId ? user.name.charAt(0) : selectedUser.name.charAt(0)}
-                        </div>
+                  {Object.entries(groupMessagesByDate(messages)).map(([dateLabel, msgs]) => (
+                    <div key={dateLabel}>
+                      {/* Date Separator */}
+                      <div className="flex justify-center my-4">
+                        <span className="text-xs bg-gray-200 text-gray-600 px-3 py-1 rounded-full">
+                          {dateLabel}
+                        </span>
+                      </div>
+
+                      {/* Messages under this date */}
+                      {msgs.map((msg) => (
                         <div
-                          className={`px-4 py-3 rounded-2xl shadow-sm ${
-                            msg.senderId === user.userId
-                              ? 'bg-blue-500 text-white rounded-br-md'
-                              : 'bg-white text-gray-800 rounded-bl-md border border-gray-200'
-                          }`}
+                          key={msg.messageId}
+                          className={`flex ${msg.senderId === user.userId ? 'justify-end' : 'justify-start'}`}
                         >
-                          <div className="text-sm leading-relaxed">{msg.content}</div>
-                          <div className={`text-xs mt-1 ${
-                            msg.senderId === user.userId ? 'text-blue-100' : 'text-gray-500'
-                          }`}>
-                            {formatDate(msg.createdAt)}
-                            {msg.isTemp && (
-                              <span className="ml-1 text-xs opacity-70">(Sending...)</span>
-                            )}
+                          <div
+                            className={`flex items-end space-x-2 max-w-xs sm:max-w-md lg:max-w-lg ${
+                              msg.senderId === user.userId ? 'flex-row-reverse space-x-reverse' : ''
+                            }`}
+                          >
+                            <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center text-white font-medium text-xs">
+                              {msg.senderId === user.userId ? user.name.charAt(0) : selectedUser.name.charAt(0)}
+                            </div>
+                            <div
+                              className={`px-4 py-3 rounded-2xl shadow-sm ${
+                                msg.senderId === user.userId
+                                  ? 'bg-blue-500 text-white rounded-br-md'
+                                  : 'bg-white text-gray-800 rounded-bl-md border border-gray-200'
+                              }`}
+                            >
+                              <div className="text-sm leading-relaxed">{msg.content}</div>
+                              <div
+                                className={`text-xs mt-1 ${
+                                  msg.senderId === user.userId ? 'text-blue-100' : 'text-gray-500'
+                                }`}
+                              >
+                                {formatDate(msg.createdAt)}
+                                {msg.isTemp && <span className="ml-1 text-xs opacity-70">(Sending...)</span>}
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                ))}
+
                   <div ref={messagesEndRef} />
                 </div>
               ) : (

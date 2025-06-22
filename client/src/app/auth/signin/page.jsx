@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Mail, Lock, User, MessageSquare, Sparkles } from 'lucide-react';
 import api from '@/lib/api';
+import { successToast, errorToast } from '@/components/ui/toast';
 
 export default function SignIn() {
   const [isLogin, setIsLogin] = useState(true);
@@ -26,6 +27,7 @@ export default function SignIn() {
         const response = await api.post(endpoint, { email, password});
         
         if (response?.data?.token) {
+          successToast(response?.data?.message || 'Login successful!');
           localStorage.setItem('token', JSON.stringify(response.data.token));
           router.push('/dashboard');
         }
@@ -34,13 +36,15 @@ export default function SignIn() {
         const endpoint = '/user/register';
         const response = await api.post(endpoint, { email, password, name });
         
-        if (response.data.token) {
-          localStorage.setItem('token', response.data.token);
+        if (response?.data?.token) {
+          successToast(response?.data?.message || 'Registration successful!');
+          localStorage.setItem('token', JSON.stringify(response.data.token));
           router.push('/dashboard');
         }
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'An error occurred');
+      errorToast(err.response?.data?.error || 'Login failed. Please try later.');
+      //setError(err.response?.data?.message || 'An error occurred');
     } finally {
       setIsLoading(false);
     }

@@ -3,13 +3,12 @@ import userService from "../services/user.service.js";
 // Create a new user
 const createUser = async (req, res, next) => {
   try {
-    console.log(req.body);
     const { response, user } = await userService.createUser(req.body);
 
     res.status(201).json({
-      message: "User Registered Successfully",
-      user,
-      token: {response}
+      message: "User registration successful.",
+      token: `${response}`,
+      user
     });
   } catch (error) {
     next(error);
@@ -19,7 +18,6 @@ const createUser = async (req, res, next) => {
 const getConnectedUsers = async (req, res, next) => {
   try{
     const userId = req.user.id;
-    console.log(userId);
   const users = await userService.getConnections(userId);
   res.status(200).json({ users, message: "Connected users retrieved successfully" });
 } catch (error) {
