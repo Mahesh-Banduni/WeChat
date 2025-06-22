@@ -364,7 +364,7 @@ const groupMessagesByDate = (messages) => {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                 </div>
               ) : messages.length > 0 ? (
-                <div className="p-4 space-y-4">
+                <div className="p-3 space-y-3">
                   {Object.entries(groupMessagesByDate(messages)).map(([dateLabel, msgs]) => (
                     <div key={dateLabel}>
                       {/* Date Separator */}
@@ -378,7 +378,7 @@ const groupMessagesByDate = (messages) => {
                       {msgs.map((msg) => (
                         <div
                           key={msg.messageId}
-                          className={`flex ${msg.senderId === user.userId ? 'justify-end' : 'justify-start'}`}
+                          className={`mt-1 flex ${msg.senderId === user.userId ? 'justify-end' : 'justify-start'}`}
                         >
                           <div
                             className={`flex items-end space-x-2 max-w-xs sm:max-w-md lg:max-w-lg ${
@@ -401,8 +401,8 @@ const groupMessagesByDate = (messages) => {
                                   msg.senderId === user.userId ? 'text-blue-100' : 'text-gray-500'
                                 }`}
                               >
-                                {formatDate(msg.createdAt)}
-                                {msg.isTemp && <span className="ml-1 text-xs opacity-70">(Sending...)</span>}
+                                <span className="text-[75%]">{formatDate(msg.createdAt)}</span>
+                                {msg.isTemp && <span className="ml-1 text-[75%] opacity-70">(Sending...)</span>}
                               </div>
                             </div>
                           </div>
