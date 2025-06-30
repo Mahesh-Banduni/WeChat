@@ -2,85 +2,225 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Users, MessageSquare, Send, ArrowLeft } from 'lucide-react';
-import io from 'socket.io-client';
 import api from '@/lib/api';
+import { useSocket } from '@/providers/socket-provider';
 import useAuth from '@/hooks/useAuth';
 import { format, isToday, isYesterday } from 'date-fns';
 
 export default function ChatPage() {
   const { user } = useAuth();
-  const [connectedUsers, setConnectedUsers] = useState([]);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [latestMessages, setLatestMessages] = useState([]);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [showChat, setShowChat] = useState(false); // Mobile view state
-  const socketRef = useRef(null);
+  const [showChat, setShowChat] = useState(false);
+  const [typingUsers, setTypingUsers] = useState({});
+  const [onlineStatus, setOnlineStatus] = useState({});
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const socket = useSocket();
 
-  // Initialize socket and load connections
+  // Enhanced socket handler with proper message handling
+  const handleNewMessage = (msg) => {
+    console.log('Received new message:', msg);
+    
+    // For current chat - add to messages if it's for the selected conversation
+    if (selectedUser && 
+        ((msg.senderId === selectedUser.userId && msg.receiverId === user.userId) ||
+         (msg.senderId === user.userId && msg.receiverId === selectedUser.userId))) {
+      setMessages(prev => {
+        // Check if message already exists
+        if (!prev.some(m => m.messageId === msg.messageId)) {
+          // Add new message and sort by createdAt (oldest first)
+          const updated = [...prev, msg];
+          return updated.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        }
+        return prev;
+      });
+    }
+    
+    // Update latest messages
+    setLatestMessages(prev => {
+      const otherUserId = msg.senderId === user.userId ? msg.receiverId : msg.senderId;
+      const existingIndex = prev.findIndex(m => m.user.userId === otherUserId);
+      
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        const [movedItem] = updated.splice(existingIndex, 1);
+        
+        // Update unread count only if message is received (not sent by current user)
+        const unreadCount = msg.receiverId === user.userId && selectedUser?.userId !== msg.senderId
+          ? (movedItem.unreadCount || 0) + 1 
+          : selectedUser?.userId === otherUserId ? 0 : movedItem.unreadCount || 0;
+        
+        updated.unshift({
+          ...movedItem,
+          latestMessage: msg,
+          unreadCount
+        });
+        return updated;
+      }
+      return prev;
+    });
+  };
+
+  // Handle message status updates
+  const handleMessageStatusUpdate = (data) => {
+    console.log('Message status update:', data);
+    
+    // Update message status in current chat
+    if (selectedUser) {
+      setMessages(prev => prev.map(msg => 
+        msg.messageId === data.messageId 
+          ? { ...msg, status: data.status, readAt: data.readAt }
+          : msg
+      ));
+    }
+    
+    // Update latest messages status
+    setLatestMessages(prev => prev.map(item => {
+      if (item.latestMessage?.messageId === data.messageId) {
+        return {
+          ...item,
+          latestMessage: {
+            ...item.latestMessage,
+            status: data.status,
+            readAt: data.readAt
+          }
+        };
+      }
+      return item;
+    }));
+  };
+
+  // Handle when messages are marked as read
+  const handleMessagesRead = (data) => {
+    console.log('Messages marked as read:', data);
+    
+    // Update message status in current chat
+    if (selectedUser && data.senderId === user.userId) {
+      setMessages(prev => prev.map(msg => 
+        msg.senderId === user.userId && msg.receiverId === data.receiverId
+          ? { ...msg, status: 'READ', readAt: data.readAt }
+          : msg
+      ));
+    }
+  };
+
+  // Handle typing indicators
+  const handleUserTyping = (data) => {
+    setTypingUsers(prev => ({
+      ...prev,
+      [data.userId]: data.typing
+    }));
+
+    // Auto-clear typing indicator after 3 seconds
+    if (data.typing) {
+      setTimeout(() => {
+        setTypingUsers(prev => ({
+          ...prev,
+          [data.userId]: false
+        }));
+      }, 3000);
+    }
+  };
+
+  // Handle user status updates (online/offline)
+  const handleUserStatusUpdate = (data) => {
+    setOnlineStatus(prev => ({
+      ...prev,
+      [data.userId]: {
+        status: data.status,
+        lastSeen: data.lastSeen || new Date().toISOString()
+      }
+    }));
+
+    // Also update the latestMessages to reflect status changes
+    setLatestMessages(prev => prev.map(item => {
+      if (item.user.userId === data.userId) {
+        return {
+          ...item,
+          user: {
+            ...item.user,
+            status: data.status,
+            lastSeen: data.lastSeen
+          }
+        };
+      }
+      return item;
+    }));
+  };
+
   useEffect(() => {
-    if (!user) return;
+    if (!user || !socket) return;
 
-    const fetchConnectedUsers = async () => {
+    const fetchLatestMessages = async () => {
       try {
-        const response = await api.get('/connection/all');
-        setConnectedUsers(response.data.result || []);
+        setIsLoadingContacts(true); 
+        const response = await api.get('/message/latest');
+        // Sort by latest message first
+        const sorted = response.data.results?.sort((a, b) => 
+          new Date(b.latestMessage?.createdAt || 0) - new Date(a.latestMessage?.createdAt || 0)
+        ) || [];
+        setLatestMessages(sorted);
       } catch (error) {
-        console.error('Error fetching connections:', error);
+        console.error('Error fetching latest messages:', error);
+      }
+      finally {
+        setIsLoadingContacts(false); // Stop loading regardless of success/error
       }
     };
 
-    fetchConnectedUsers();
+    fetchLatestMessages();
 
-    // Connect to Socket.IO server on port 8080
-    socketRef.current = io(process.env.NEXT_PUBLIC_SOCKET_URL, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      transports: ['websocket'],
-      auth: {
-        token: user.token // Include auth token if needed
-      }
+    // Join user's room
+    socket.emit('join', { userId: user.userId });
+
+    // Notify others that user is online when component mounts
+    socket.emit('user_online', { 
+      userId: user.userId,
+      timestamp: new Date().toISOString()
     });
 
-    socketRef.current.on('connect', () => {
-      console.log('🟢 Connected to socket:', socketRef.current.id);
-      // Join user's personal room
-      socketRef.current.emit('join', { userId: user.userId });
-    });
-
-    socketRef.current.on('new_message', (msg) => {
-      // Only add if relevant to current chat and not our own temp message
-      if ((msg.senderId === selectedUser?.userId || msg.receiverId === selectedUser?.userId) &&
-          msg.senderId !== user.userId) {
-        setMessages(prev => {
-          if (!prev.some(m => m.messageId === msg.messageId)) {
-            return [...prev, msg].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-          }
-          return prev;
+    // Add visibility change listener to handle tab switching
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // User came back to the page/tab
+        socket.emit('user_online', { 
+          userId: user.userId,
         });
       }
-    });
+    };
 
-    socketRef.current.on('message_delivered', (deliveredMsg) => {
-      // Update temp message with final delivered message
-      setMessages(prev => prev.map(m => 
-        m.isTemp && m.senderId === user.userId ? deliveredMsg : m
-      ));
-    });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    socketRef.current.on('message_error', (error) => {
-      console.error('Message delivery failed:', error);
-      // Remove the temporary message if sending failed
-      setMessages(prev => prev.filter(m => !m.isTemp || m.senderId !== user.userId));
-    });
+    // Socket event listeners
+    socket.on('new_message', handleNewMessage);
+    socket.on('message_status_update', handleMessageStatusUpdate);
+    socket.on('messages_read', handleMessagesRead);
+    socket.on('user_typing', handleUserTyping);
+    socket.on('user_status_update', handleUserStatusUpdate);
 
     return () => {
-      socketRef.current?.disconnect();
+      socket.off('new_message', handleNewMessage);
+      socket.off('message_status_update', handleMessageStatusUpdate);
+      socket.off('messages_read', handleMessagesRead);
+      socket.off('user_typing', handleUserTyping);
+      socket.off('user_status_update', handleUserStatusUpdate);
+
+      // Remove visibility change listener
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+      // Notify others that user is going offline
+      socket.emit('user_offline', { 
+        userId: user.userId
+      });
     };
-  }, [user, selectedUser]);
+  }, [user, socket, selectedUser]);
 
   // Load messages when user is selected
   useEffect(() => {
@@ -89,10 +229,60 @@ export default function ChatPage() {
     }
   }, [selectedUser]);
 
-  // Scroll to bottom when messages change
+  // Auto-scroll with smooth behavior
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    // Scroll to bottom when messages change
+    const scrollToBottom = () => {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    };
+
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages, selectedUser]);
+
+  // Handle typing events
+  useEffect(() => {
+    if (!selectedUser || !socket) return;
+
+    if (newMessage.trim()) {
+      if (!isTyping) {
+        setIsTyping(true);
+        socket.emit('typing_start', {
+          senderId: user.userId,
+          receiverId: selectedUser.userId
+        });
+      }
+
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Set new timeout
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        socket.emit('typing_stop', {
+          senderId: user.userId,
+          receiverId: selectedUser.userId
+        });
+      }, 2000);
+    } else {
+      setIsTyping(false);
+      socket.emit('typing_stop', {
+        senderId: user.userId,
+        receiverId: selectedUser.userId
+      });
+    }
+
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [newMessage, selectedUser, socket, user]);
 
   const loadMessages = async () => {
     if (!selectedUser || !user) return;
@@ -105,7 +295,22 @@ export default function ChatPage() {
           receiverId: selectedUser.userId
         }
       });
-      setMessages(response.data || []);
+      
+      // Sort messages by createdAt (oldest first) for proper chronological order
+      const sortedMessages = response.data?.sort((a, b) => 
+        new Date(a.createdAt) - new Date(b.createdAt)
+      ) || [];
+      
+      setMessages(sortedMessages);
+      
+      // Mark messages as read
+      await markMessagesAsRead(selectedUser.userId);
+      
+      // Scroll to bottom after messages are loaded
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+      
     } catch (error) {
       console.error('Error loading messages:', error);
     } finally {
@@ -113,14 +318,49 @@ export default function ChatPage() {
     }
   };
 
-  const handleSelectUser = (peerUser) => {
-    setSelectedUser(peerUser);
-    setShowChat(true); // Show chat on mobile
+  // Enhanced with real-time status update
+  const markMessagesAsRead = async (senderId) => {
+    try {
+      await api.post('/message/mark-read', { senderId });
+
+      // Update latest messages unread count
+      setLatestMessages(prev => prev.map(item => {
+        if (item.user.userId === senderId) {
+          return { ...item, unreadCount: 0 };
+        }
+        return item;
+      }));
+
+      // Emit socket event for real-time status update
+      if (socket) {
+        socket.emit('mark_messages_read', {
+          senderId: user.userId,
+          receiverId: senderId
+        });
+      }
+
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+  };
+
+  const handleSelectUser = async (userData) => {
+    setSelectedUser(userData.user);
+    setShowChat(true);
+    // loadMessages will be called by useEffect
   };
 
   const handleBackToContacts = () => {
     setShowChat(false);
     setSelectedUser(null);
+    setMessages([]);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
   const handleSendMessage = async () => {
@@ -131,40 +371,72 @@ export default function ChatPage() {
       messageId: tempMessageId,
       senderId: user.userId,
       receiverId: selectedUser.userId,
-      content: newMessage,
+      content: newMessage.trim(),
       createdAt: new Date().toISOString(),
+      status: 'SENDING',
       isTemp: true
     };
 
     setIsSending(true);
-    setMessages(prev => [...prev, tempMessage]);
+    
+    // Add temp message to chat (will be sorted properly)
+    setMessages(prev => {
+      const updated = [...prev, tempMessage];
+      return updated.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    });
+    
+    const messageContent = newMessage.trim();
     setNewMessage('');
 
     try {
-      // Save to DB via API (port 8000)
       const response = await api.post('/message/send', {
         receiverId: selectedUser.userId,
-        content: newMessage,
+        content: messageContent,
       });
 
-      // The API server will forward to Socket.IO server
-      // Just update our local state with the final message
-      setMessages(prev => prev.map(m => 
-        m.messageId === tempMessageId ? response.data : m
-      ));
+      // Replace temp message with actual message
+      setMessages(prev => {
+        const updated = prev.map(m => 
+          m.messageId === tempMessageId ? { ...response.data, status: 'SENT' } : m
+        );
+        return updated.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      });
+
+      // Update latest messages
+      setLatestMessages(prev => {
+        const updated = prev.map(item => 
+          item.user.userId === selectedUser.userId
+            ? {
+                ...item,
+                latestMessage: { ...response.data, status: 'SENT' },
+                unreadCount: 0
+              }
+            : item
+        );
+        
+        // Move conversation to top
+        const index = updated.findIndex(item => item.user.userId === selectedUser.userId);
+        if (index > 0) {
+          const [movedItem] = updated.splice(index, 1);
+          updated.unshift(movedItem);
+        }
+        return updated;
+      });
+
+      // Emit socket event for real-time delivery
+      if (socket) {
+        socket.emit('message_sent', {
+          messageId: response.data.messageId,
+          receiverId: selectedUser.userId
+        });
+      }
 
     } catch (error) {
       console.error('Error sending message:', error);
+      // Remove temp message on error
       setMessages(prev => prev.filter(m => m.messageId !== tempMessageId));
     } finally {
       setIsSending(false);
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
     }
   };
 
@@ -178,31 +450,62 @@ export default function ChatPage() {
     }
   };
 
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return '';
+    
+    const now = new Date();
+    const lastSeenDate = new Date(lastSeen);
+    const diffInMinutes = Math.floor((now - lastSeenDate) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
+
+  const getMessageStatusIcon = (message) => {
+    if (message.senderId !== user.userId) return null;
+    
+    switch (message.status) {
+      case 'SENDING':
+        return <span className="text-[75%] opacity-50">⏳</span>;
+      case 'SENT':
+        return <span className="text-[75%]">✓</span>;
+      case 'DELIVERED':
+        return <span className="text-[75%]">✓✓</span>;
+      case 'READ':
+        return <span className="text-[75%] text-blue-200">✓✓</span>;
+      default:
+        return <span className="text-[75%]">✓</span>;
+    }
+  };
+
+  const groupMessagesByDate = (messages) => {
+    const groups = {};
+
+    // Messages are already sorted chronologically (oldest first)
+    messages.forEach((msg) => {
+      const date = new Date(msg.createdAt);
+      let key;
+
+      if (isToday(date)) {
+        key = 'Today';
+      } else if (isYesterday(date)) {
+        key = 'Yesterday';
+      } else {
+        key = format(date, 'dd MMM yyyy');
+      }
+
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(msg);
+    });
+
+    return groups;
+  };
+
   if (!user) return null;
-
-const groupMessagesByDate = (messages) => {
-  const groups = {};
-
-  messages.forEach((msg) => {
-    const date = new Date(msg.createdAt);
-    let key;
-
-    if (isToday(date)) {
-      key = 'Today';
-    } else if (isYesterday(date)) {
-      key = 'Yesterday';
-    } else {
-      key = format(date, 'dd MMM yyyy');
-    }
-
-    if (!groups[key]) {
-      groups[key] = [];
-    }
-    groups[key].push(msg);
-  });
-
-  return groups;
-};
 
   return (
     <div className="flex h-full">
@@ -216,11 +519,6 @@ const groupMessagesByDate = (messages) => {
         <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold text-gray-900">Chats</h1>
-            {/* <div className="flex items-center space-x-1">
-              <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-1 rounded-full">
-                {connectedUsers.length} online
-              </span>
-            </div> */}
           </div>
         </div>
 
@@ -242,72 +540,83 @@ const groupMessagesByDate = (messages) => {
           
         {/* Contacts List */}
         <div className="divide-y divide-gray-100">
-          {connectedUsers.map((connection, index) => {
-            const peerUser = connection.userA.userId !== user.userId
-              ? connection.userA
-              : connection.userB;
-            return (
+          {isLoadingContacts ? (
+            <div className="flex justify-center items-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+          ) : latestMessages.length > 0 ? (
+            latestMessages.map((item) => (
               <div
-                key={peerUser.userId}
-                className={`relative px-4 py-3 cursor-pointer transition-all duration-150 hover:bg-gray-50 active:bg-gray-100 ${
-                  selectedUser?.userId === peerUser.userId 
+                key={item.user.userId}
+                className={`relative px-4 py-3 cursor-pointer transition-all duration-300 hover:bg-gray-50 active:bg-gray-100 ${
+                  selectedUser?.userId === item.user.userId 
                     ? 'bg-blue-50 border-r-3 border-blue-500' 
                     : ''
                 }`}
-                onClick={() => handleSelectUser(peerUser)}
+                onClick={() => handleSelectUser(item)}
               >
                 <div className="flex items-start space-x-3">
-                  {/* Profile Picture with Online Status */}
                   <div className="relative flex-shrink-0">
                     <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-base shadow-sm">
-                      {peerUser.name.charAt(0).toUpperCase()}
+                      {item.user.name.charAt(0).toUpperCase()}
                     </div>
-                    {/* Online indicator */}
-                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 border-2 border-white rounded-full"></div>
+                    <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 border-2 border-white rounded-full ${
+                      onlineStatus[item.user.userId]?.status === 'online' 
+                        ? 'bg-green-400' 
+                        : 'bg-gray-400'
+                    }`}></div>
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="font-semibold text-gray-900 truncate text-base">
-                        {peerUser.name}
+                        {item.user.name}
                       </h3>
-                      <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
-                        12:30 PM
-                      </span>
+                      {item.latestMessage?.createdAt && (
+                        <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
+                          {formatDate(item.latestMessage.createdAt)}
+                        </span>
+                      )}
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-600 truncate pr-2">
-                        Click to start chatting...
-                      </p>
-                      {/* Unread badge - you can conditionally show this
-                      {index === 0 && (
-                        <div className="flex-shrink-0">
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <p className="text-sm text-gray-600 truncate">
+                          {typingUsers[item.user.userId] 
+                            ? 'typing...' 
+                            : item.latestMessage?.content || 'Click to start chatting...'}
+                        </p>
+                        {item.latestMessage?.senderId === user.userId && (
+                          <span className="text-xs text-gray-400 flex-shrink-0">
+                            {getMessageStatusIcon(item.latestMessage)}
+                          </span>
+                        )}
+                      </div>
+                      {item.unreadCount > 0 && (
+                        <div className="flex-shrink-0 ml-2">
                           <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-medium text-white bg-blue-500 rounded-full">
-                            2
+                            {item.unreadCount}
                           </span>
                         </div>
-                      )} */}
+                      )}
                     </div>
+                    {onlineStatus[item.user.userId]?.status !== 'online'}
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-
-        {/* Empty State */}
-        {connectedUsers.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 px-4">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <Users className="w-8 h-8 text-gray-400" />
+            ))
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 px-4">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <Users className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-700 mb-2">No conversations yet</h3>
+              <p className="text-sm text-gray-500 text-center max-w-sm">
+                Your conversations will appear here once you start messaging.
+              </p>
             </div>
-            <h3 className="text-lg font-medium text-gray-700 mb-2">No contacts yet</h3>
-            <p className="text-sm text-gray-500 text-center max-w-sm">
-              Your conversations will appear here once you connect with other users.
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Main Chat Area */}
@@ -328,15 +637,29 @@ const groupMessagesByDate = (messages) => {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-medium">
-                {selectedUser.name.charAt(0)}
+              <div className="relative">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-medium">
+                  {selectedUser.name.charAt(0)}
+                </div>
+                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full ${
+                  onlineStatus[selectedUser.userId]?.status === 'online' 
+                    ? 'bg-green-400' 
+                    : 'bg-gray-400'
+                }`}></div>
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-semibold text-gray-900 truncate">
-                  {selectedUser.name}
-                </h2>
+                <div className="flex items-center">
+                  <h2 className="text-lg font-semibold text-gray-900 truncate">
+                    {selectedUser.name}
+                  </h2>
+                  {typingUsers[selectedUser.userId] && (
+                    <span className="ml-2 text-xs text-gray-500">is typing...</span>
+                  )}
+                </div>
                 <div className="text-sm text-gray-500 truncate">
-                  {selectedUser.email}
+                  {onlineStatus[selectedUser.userId]?.status === 'online' 
+                    ? 'Online' 
+                    : ``}
                 </div>
               </div>
             </div>
@@ -348,7 +671,7 @@ const groupMessagesByDate = (messages) => {
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
                 <p className="text-sm text-gray-500">
-                  {connectedUsers.length} contacts available
+                  {latestMessages.length} contacts available
                 </p>
               </div>
             </div>
@@ -364,7 +687,7 @@ const groupMessagesByDate = (messages) => {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                 </div>
               ) : messages.length > 0 ? (
-                <div className="p-3 space-y-3">
+                <div className="p-3 flex flex-col">
                   {Object.entries(groupMessagesByDate(messages)).map(([dateLabel, msgs]) => (
                     <div key={dateLabel}>
                       {/* Date Separator */}
@@ -374,7 +697,7 @@ const groupMessagesByDate = (messages) => {
                         </span>
                       </div>
 
-                      {/* Messages under this date */}
+                      {/* Messages - maintain chronological order */}
                       {msgs.map((msg) => (
                         <div
                           key={msg.messageId}
@@ -393,24 +716,25 @@ const groupMessagesByDate = (messages) => {
                                 msg.senderId === user.userId
                                   ? 'bg-blue-500 text-white rounded-br-md'
                                   : 'bg-white text-gray-800 rounded-bl-md border border-gray-200'
-                              }`}
+                              } ${msg.isTemp ? 'opacity-70' : ''}`}
                             >
                               <div className="text-sm leading-relaxed">{msg.content}</div>
-                              <div
-                                className={`text-xs mt-1 ${
-                                  msg.senderId === user.userId ? 'text-blue-100' : 'text-gray-500'
-                                }`}
-                              >
+                              <div className={`text-xs mt-1 flex items-center space-x-1 ${
+                                msg.senderId === user.userId ? 'text-blue-100' : 'text-gray-500'
+                              }`}>
                                 <span className="text-[75%]">{formatDate(msg.createdAt)}</span>
-                                {msg.isTemp && <span className="ml-1 text-[75%] opacity-70">(Sending...)</span>}
+                                {msg.senderId === user.userId && (
+                                  <span className="ml-1">
+                                    {getMessageStatusIcon(msg)}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
                         </div>
                       ))}
                     </div>
-                ))}
-
+                  ))}
                   <div ref={messagesEndRef} />
                 </div>
               ) : (
@@ -455,17 +779,21 @@ const groupMessagesByDate = (messages) => {
                 />
               </div>
               <div>
-              <button
-                onClick={handleSendMessage}
-                disabled={!newMessage.trim() || isSending}
-                className={`p-3 rounded-xl transition-all duration-200 flex items-center justify-center ${
-                  newMessage.trim() && !isSending
-                    ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg hover:shadow-xl active:bg-blue-700'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                <Send className="w-5 h-5" />
-              </button>
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!newMessage.trim() || isSending}
+                  className={`p-3 rounded-xl transition-all duration-200 flex items-center justify-center ${
+                    newMessage.trim() && !isSending
+                      ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg hover:shadow-xl active:bg-blue-700'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {isSending ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Send className="w-5 h-5" />
+                  )}
+                </button>
               </div>
             </div>
           ) : (

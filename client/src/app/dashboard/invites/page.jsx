@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { UserPlus, Mail, User, Check, Clock, Send, Users, Heart } from 'lucide-react';
 import useAuth from '@/hooks/useAuth';
 import api from '@/lib/api';
-import { errorToast } from '@/components/ui/toast';
+import { successToast, errorToast } from '@/components/ui/toast';
+import { useSocket } from '@/providers/socket-provider';
 
 export default function InvitesPage() {
   const { user } = useAuth();
@@ -12,6 +13,41 @@ export default function InvitesPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
+    
+  // Initialize socket connection
+  const socket = useSocket();
+
+  useEffect(() => {
+    if (!user || !socket) return; 
+
+    const handleNewInvite = (newInvite) => {
+    if (newInvite.receiverId === user.userId) {
+      setInvites(prev => {
+        const exists = prev.some(inv => inv.inviteId === newInvite.inviteId);
+        return exists ? prev : [...prev, newInvite];
+      });
+      fetchInvites();
+    }
+  };
+
+  // Only needed if you want to update state when invite is accepted
+  const handleAcceptedInvite = (acceptedInvite) => {
+    setInvites(prev => prev.map(inv =>
+      inv.inviteId === acceptedInvite.inviteId
+        ? { ...inv, status: 'ACCEPTED' }
+        : inv
+    ));
+    fetchInvites();
+  };
+
+  socket.on("new_invite", handleNewInvite);
+  socket.on("accepted_invite", handleAcceptedInvite);
+
+    return () => {
+      // socket.off('new_invite');
+      // socket.off('accepted_invite');
+    };
+  }, [user, socket]);
 
   const fetchInvites = async () => {
     try {
@@ -19,7 +55,7 @@ export default function InvitesPage() {
       const response = await api.get('/connection/invites');
       setInvites(response.data.result || []);
     } catch (error) {
-      //errorToast(error.response?.data?.error);
+      errorToast(error.response?.data?.error);
       console.error('Error fetching invites:', error);
     } finally {
       setLoading(false);
@@ -283,7 +319,7 @@ export default function InvitesPage() {
                         ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                         : 'bg-slate-100 text-slate-600 border-slate-200'
                     }`}>
-                      {invite.status === 'PENDING' ? 'Pending' : invite.status === 'accepted' ? 'Accepted' : 'Declined'}
+                      {invite.status === 'PENDING' ? 'Pending' : invite.status === 'ACCEPTED' ? 'Accepted' : 'Declined'}
                     </span>
                     {invite.status === 'PENDING' && (
                       <Clock className="w-4 h-4 lg:w-5 lg:h-5 text-amber-500" />

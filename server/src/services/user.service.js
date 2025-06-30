@@ -35,23 +35,6 @@ const createUser = async (userData) => {
   return { response, user: {name: user.name, email: user.email}};
 };
 
-const getConnections = async (userId) => {
-  const user = await prisma.user.findUnique({
-      where: { userId },
-    });
-
-    if (!user) {
-      throw new NotFoundError("User not found");
-  }
-
-  const connections = await prisma.connection.findMany({
-    where: { OR: [{ userAId: userId }, { userBId: userId }] },
-    include: { userA: true, userB: true },
-  });
-
-  return connections.map(conn => conn.userA.id === userId ? conn.userB : conn.userA);
-};
-
 const getUserById = async (userId) => {
   const user = await prisma.user.findFirst({
     where: {userId},
@@ -148,7 +131,6 @@ const getUserById = async (userId) => {
 
 export default {
   createUser,
-  getConnections,
   // getAllUsers,
   getUserById,
   // updateUser,

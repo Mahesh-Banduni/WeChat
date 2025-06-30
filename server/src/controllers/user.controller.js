@@ -15,16 +15,6 @@ const createUser = async (req, res, next) => {
   }
 };
 
-const getConnectedUsers = async (req, res, next) => {
-  try{
-    const userId = req.user.id;
-  const users = await userService.getConnections(userId);
-  res.status(200).json({ users, message: "Connected users retrieved successfully" });
-} catch (error) {
-    next(error);
-  }
-};
-
 // Get user by ID
 const getUserById = async (req, res, next) => {
   try {
@@ -108,6 +98,5 @@ const getUserById = async (req, res, next) => {
 
 export default {
   createUser, 
-  getConnectedUsers,
   getUserById
 }

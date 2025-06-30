@@ -4,13 +4,20 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 const sendInvite = async(senderId, email) => {
-
     const receiver = await prisma.user.findFirst({
         where: { email },
     });
 
     if (!receiver) {
         throw new NotFoundError("User with this email does not exist");
+    }
+
+    const selfInvite = await prisma.user.findFirst({
+        where: { userId: senderId, email },
+    });
+    
+    if (selfInvite) {
+        throw new NotFoundError("Cannot send invite to oneself");
     }
 
     const receiverId = receiver.userId; 
@@ -37,7 +44,34 @@ const sendInvite = async(senderId, email) => {
 
     const invite = await prisma.invite.create({
         data: { senderId, receiverId },
+        select:{
+            senderId: true,
+            receiverId: true,
+            status: true,
+            receiver: {
+                select: {
+                    userId: true,
+                    name: true,
+                    email: true
+                }
+            },
+            sender:{
+                select: {
+                    userId: true,
+                    name: true,
+                    email: true
+                }
+            }
+        }
     }); 
+
+    await prisma.notification.create({
+        data:{
+            userId: receiverId,
+            message: `${invite.sender.name} has sent you connection request`,
+            type: 'MESSAGE'
+        }
+    })
     if(!invite) {
         throw new BadRequestError("Cannot send invite. Please try again later.");
     }
@@ -63,6 +97,25 @@ const acceptInvite = async (inviteId, userId) => {
     const updatedInvite = await prisma.invite.update({
         where: { inviteId, receiverId: userId },
         data: { status: "ACCEPTED" },
+        select:{
+            senderId: true,
+            receiverId: true,
+            status: true,
+            receiver: {
+                select: {
+                    userId: true,
+                    name: true,
+                    email: true
+                }
+            },
+            sender:{
+                select: {
+                    userId: true,
+                    name: true,
+                    email: true
+                }
+            }
+        }
     });
 
     if (!updatedInvite) {
@@ -72,6 +125,14 @@ const acceptInvite = async (inviteId, userId) => {
     await prisma.connection.create({
       data: { userAId: updatedInvite.senderId, userBId: updatedInvite.receiverId },
     });
+
+    await prisma.notification.create({
+      data:{
+          userId: updatedInvite.senderId,
+          message: `Congratulation!! ${updatedInvite.receiver.name} has accepted your connection request`,
+          type: 'CONNECTION'
+      }
+    })
 
   return updatedInvite;
 };
