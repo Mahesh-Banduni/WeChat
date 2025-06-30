@@ -12,16 +12,17 @@ const toastConfig = {
   theme: "light",
 };
 
-export const showToast = (type, message) => {
+export const showToast = (type, message, onClick = null) => {
   if (typeof window !== 'undefined') {
     toast[type](message, {
       ...toastConfig,
       toastId: `${type}-${message}`,
+      onClick,
     });
   }
 };
 
-export const successToast = (message) => showToast('success', message);
-export const errorToast = (message) => showToast('error', message);
-export const warningToast = (message) => showToast('warning', message);
-export const infoToast = (message) => showToast('info', message);
+export const successToast = (message, onClick = null) => showToast('success', message, onClick);
+export const errorToast = (message, onClick = null) => showToast('error', message, onClick);
+export const warningToast = (message, onClick = null) => showToast('warning', message, onClick);
+export const infoToast = (message, onClick = null) => showToast('info', message, onClick);

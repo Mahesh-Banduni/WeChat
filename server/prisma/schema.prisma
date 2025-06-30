@@ -19,6 +19,7 @@ model User {
   connectionsB   Connection[] @relation("ConnectionB")
   messagesSent   Message[]    @relation("MessagesSent")
   messagesReceived Message[]  @relation("MessagesReceived")
+  notifications      Notification[]
 }
 
 model Invite {
@@ -53,8 +54,34 @@ model Message {
   senderId    String
   receiverId  String
   content     String
+  status      MessageStatus @default(SENT)
   createdAt   DateTime @default(now())
 
   sender      User     @relation("MessagesSent", fields: [senderId], references: [userId])
   receiver    User     @relation("MessagesReceived", fields: [receiverId], references: [userId])
 }
+
+model Notification {
+  notificationId String   @id @default(uuid())
+  userId         String
+  type           NotificationType
+  message        String
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  user           User     @relation(fields: [userId], references: [userId])
+}
+
+enum NotificationType {
+  INVITE
+  MESSAGE
+  CONNECTION
+  SYSTEM
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+

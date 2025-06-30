@@ -1,7 +1,7 @@
 // src/components/layout/Sidebar.jsx
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
@@ -17,11 +17,43 @@ import {
   LogOut
 } from 'lucide-react';
 import useAuth from '@/hooks/useAuth';
+import { errorToast } from '../ui/toast';
+import api from '@/lib/api';
 
 export default function Sidebar({ isOpen, onClose }) {
+  const { user } = useAuth();
   const { logout } = useAuth();
+  const [invites, setInvites] = useState([]);
   const pathname = usePathname();
+  const [connectedUsers, setConnectedUsers]= useState([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const fetchConnectedUsers = async () => {
+      try {
+        const response = await api.get('/connection/all');
+        setConnectedUsers(response.data.result || []);
+      } catch (error) {
+        errorToast(error.response?.data?.error);
+        console.error('Error fetching connections:', error);
+      }
+    };
+
+  const fetchInvites = async () => {
+    try {
+      const response = await api.get('/connection/invites');
+      setInvites(response.data.result || []);
+    } catch (error) {
+      errorToast(error.response?.data?.error);
+      console.error('Error fetching invites:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchConnectedUsers();
+      fetchInvites();
+    }
+  }, [user]);
 
   const handleLogout = () => {
     logout();
@@ -45,13 +77,13 @@ export default function Sidebar({ isOpen, onClose }) {
       label: 'Contacts',
       icon: Users,
       href: '/dashboard/chat',
-      badge: '3'
+      badge: `${connectedUsers.length}`
     },
     {
       label: 'Invites',
       icon: UserPlus,
       href: '/dashboard/invites',
-      badge: '2'
+      badge: `${invites.length}`
     },
   ];
 

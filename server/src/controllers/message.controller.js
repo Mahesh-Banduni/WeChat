@@ -30,7 +30,6 @@ const sendMessage = async (req, res, next) => {
   }
 };
 
-
 const loadMessages = async (req, res, next) => {
   try {
     const senderId = req.user.id;
@@ -44,7 +43,50 @@ const loadMessages = async (req, res, next) => {
   }
 };
 
+const getLatestMessagesAndUnreadCount = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const results = await messageService.getLatestMessagesAndUnreadCount(userId);
+    res.status(200).json({
+    message: "Latest message retreived successfully.",
+    results
+  });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const markMessagesAsRead = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const senderId = req.body.senderId;
+    const count = await messageService.markMessagesAsRead(userId, senderId);
+
+    //  // Emit to Socket.IO server
+    // try {
+    //   const socket = getSocketClient();
+    //   socket.emit('read_message', {
+    //     senderId,
+    //     userId,
+    //     fromApi: true,
+    //     message: {senderId: senderId, receiverId: userId, status: 'READ'}
+    //   });
+    // } catch (err) {
+    //   console.warn('⚠️ Failed to emit via socket client:', err.message);
+    // }
+
+    res.status(200).json({
+    message: "Marked messages as read successfully.",
+    count
+  });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   sendMessage,
   loadMessages,
+  getLatestMessagesAndUnreadCount,
+  markMessagesAsRead
 };

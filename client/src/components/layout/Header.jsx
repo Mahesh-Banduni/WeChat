@@ -4,12 +4,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { Menu, Bell, Search, Settings, LogOut, User, ChevronDown } from 'lucide-react';
 import useAuth from '@/hooks/useAuth';
+import api from '@/lib/api';
+import { errorToast } from '../ui/toast';
+import { timeAgo } from '@/lib/timeAgo'; 
+import { useRouter } from 'next/navigation';
+
 
 export default function Header({ user, onMenuClick }) {
+  const router = useRouter();
   const { logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isSearchCollapsed, setIsSearchCollapsed] = useState(false);
+  const [notifications, setNotifications]=useState([]);
 
   const userMenuRef = useRef(null);
   const notificationRef = useRef(null);
@@ -23,6 +30,35 @@ export default function Header({ user, onMenuClick }) {
     logout();
     setIsUserMenuOpen(false);
   };
+
+  const fetchNotification = async () => {
+    try {
+      const response = await api.get('/notification/all');
+      const notificationsWithTimeAgo = (response.data.notification || []).map(notif => ({
+        ...notif,
+        timeAgo: timeAgo(notif.createdAt),
+      }));
+      setNotifications(notificationsWithTimeAgo);
+    } catch (error) {
+      errorToast(error.response?.data?.error);
+      console.error('Error fetching notification:', error);
+    }
+  };
+
+  const handleNotificationClick = (notif) => {
+    if (notif.type === 'INVITE') {
+      router.push('/dashboard/invites');
+    } else if (notif.type === 'CONNECTION') {
+      router.push('/dashboard/chat');
+    } else {
+      // fallback or ignore
+      console.log('Unhandled notification type:', notif.type);
+    }
+
+    // Optionally mark as read or close the menu
+    setIsNotificationOpen(false);
+  };
+
 
   const handleClickOutside = (event) => {
     if (
@@ -51,8 +87,14 @@ export default function Header({ user, onMenuClick }) {
   };
 
   useEffect(() => {
+    if (user) {
+      fetchNotification();
+    }
+  }, [user]);
+
+  useEffect(() => {
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isSearchCollapsed]);
 
   return (
@@ -111,51 +153,56 @@ export default function Header({ user, onMenuClick }) {
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
             >
               <Bell className="w-5 h-5 text-gray-600" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
+              {notifications.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
+              )}
             </button>
-
+            
             {isNotificationOpen && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+              <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-lg border border-gray-200 z-50 transform -translate-x-0 sm:translate-x-0">
                 <div className="p-4 border-b border-gray-200">
                   <h3 className="font-semibold text-gray-900">Notifications</h3>
                 </div>
-                <div className="max-h-96 overflow-y-auto">
-                  <div className="p-4 hover:bg-gray-50 border-b border-gray-100">
-                    <div className="flex items-start space-x-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <User className="w-4 h-4 text-blue-600" />
+            
+                <div className="max-h-96 overflow-y-auto divide-y divide-gray-100">
+                  {notifications.slice(0, 3).map((notif, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleNotificationClick(notif)}
+                      className="w-full text-left p-4 hover:bg-gray-50"
+                    >
+                      <div className="flex items-start space-x-3">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <User className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900 break-words">{notif.message}</p>
+                          <p className="text-xs text-gray-500 mt-1">{notif.timeAgo}</p>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-900">New message from Alice Smith</p>
-                        <p className="text-xs text-gray-500 mt-1">2 minutes ago</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-4 hover:bg-gray-50">
-                    <div className="flex items-start space-x-3">
-                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                        <User className="w-4 h-4 text-green-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-900">Bob Johnson is now online</p>
-                        <p className="text-xs text-gray-500 mt-1">5 minutes ago</p>
-                      </div>
-                    </div>
-                  </div>
+                    </button>
+                  ))}
+
+                  {notifications.length === 0 && (
+                    <div className="p-4 text-sm text-gray-500 text-center">No notifications yet.</div>
+                  )}
                 </div>
-                <div className="p-3 border-t border-gray-200">
-                  <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                
+                <div className="p-3 border-t border-gray-200 text-center">
+                  <a
+                    href="/notifications"
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
                     View all notifications
-                  </button>
+                  </a>
                 </div>
               </div>
             )}
           </div>
-
-          {/* User Menu */}
-          <div className="relative" ref={userMenuRef}>
-            <button
-              onClick={toggleUserMenu}
+        {/* User Menu */}
+        <div className="relative" ref={userMenuRef}>
+          <button
+            onClick={toggleUserMenu}
               className="flex items-center space-x-2 lg:space-x-3 p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-medium text-sm">

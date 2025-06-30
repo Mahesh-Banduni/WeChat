@@ -1,5 +1,6 @@
 import { Geist, Geist_Mono, Poppins } from "next/font/google";
 import ToastManager from '@/components/ui/toastWrapper';
+import { SocketProvider } from '@/providers/socket-provider';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,8 +29,10 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${poppins.variable} antialiased`}
       >
+        <SocketProvider>
         <ToastManager />
         {children}
+        </SocketProvider>
       </body>
     </html>
   );
