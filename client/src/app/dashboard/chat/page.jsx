@@ -131,6 +131,7 @@ export default function ChatPage() {
 
   // Handle user status updates (online/offline)
   const handleUserStatusUpdate = (data) => {
+    console.log('User status update:', data);
     setOnlineStatus(prev => ({
       ...prev,
       [data.userId]: {
@@ -148,6 +149,39 @@ export default function ChatPage() {
             ...item.user,
             status: data.status,
             lastSeen: data.lastSeen
+          }
+        };
+      }
+      return item;
+    }));
+  };
+
+  // Handle initial online users list
+  const handleOnlineUsers = (users) => {
+    console.log('Initial online users:', users);
+    const statusUpdates = {};
+    
+    users.forEach(user => {
+      statusUpdates[user.userId] = {
+        status: 'online',
+        lastSeen: null
+      };
+    });
+    
+    setOnlineStatus(prev => ({
+      ...prev,
+      ...statusUpdates
+    }));
+    
+    // Update latest messages with online status
+    setLatestMessages(prev => prev.map(item => {
+      if (users.some(u => u.userId === item.user.userId)) {
+        return {
+          ...item,
+          user: {
+            ...item.user,
+            status: 'online',
+            lastSeen: null
           }
         };
       }
@@ -186,6 +220,9 @@ export default function ChatPage() {
       timestamp: new Date().toISOString()
     });
 
+    // Request initial list of online users
+    socket.emit('get_online_users');
+
     // Add visibility change listener to handle tab switching
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -193,6 +230,8 @@ export default function ChatPage() {
         socket.emit('user_online', { 
           userId: user.userId,
         });
+        // Refresh online users list
+        socket.emit('get_online_users');
       }
     };
 
@@ -204,6 +243,7 @@ export default function ChatPage() {
     socket.on('messages_read', handleMessagesRead);
     socket.on('user_typing', handleUserTyping);
     socket.on('user_status_update', handleUserStatusUpdate);
+    socket.on('online_users', handleOnlineUsers);
 
     return () => {
       socket.off('new_message', handleNewMessage);
@@ -211,6 +251,7 @@ export default function ChatPage() {
       socket.off('messages_read', handleMessagesRead);
       socket.off('user_typing', handleUserTyping);
       socket.off('user_status_update', handleUserStatusUpdate);
+      socket.off('online_users', handleOnlineUsers);
 
       // Remove visibility change listener
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -450,19 +491,6 @@ export default function ChatPage() {
     }
   };
 
-  const formatLastSeen = (lastSeen) => {
-    if (!lastSeen) return '';
-    
-    const now = new Date();
-    const lastSeenDate = new Date(lastSeen);
-    const diffInMinutes = Math.floor((now - lastSeenDate) / (1000 * 60));
-    
-    if (diffInMinutes < 1) return 'just now';
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-    return `${Math.floor(diffInMinutes / 1440)}d ago`;
-  };
-
   const getMessageStatusIcon = (message) => {
     if (message.senderId !== user.userId) return null;
     
@@ -519,6 +547,12 @@ export default function ChatPage() {
         <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold text-gray-900">Chats</h1>
+            <div className="flex items-center space-x-1">
+              {/* <span className="text-xs text-gray-500">
+                {Object.values(onlineStatus).filter(status => status.status === 'online').length} online
+              </span>
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span> */}
+            </div>
           </div>
         </div>
 
@@ -600,7 +634,11 @@ export default function ChatPage() {
                         </div>
                       )}
                     </div>
-                    {onlineStatus[item.user.userId]?.status !== 'online'}
+                    <div className="text-xs text-gray-400 mt-1">
+                      {onlineStatus[item.user.userId]?.status === 'online' 
+                        ? 'Online' 
+                        : `Last seen recently`}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -659,7 +697,7 @@ export default function ChatPage() {
                 <div className="text-sm text-gray-500 truncate">
                   {onlineStatus[selectedUser.userId]?.status === 'online' 
                     ? 'Online' 
-                    : ``}
+                    : `Last seen recently`}
                 </div>
               </div>
             </div>
@@ -671,7 +709,8 @@ export default function ChatPage() {
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
                 <p className="text-sm text-gray-500">
-                  {latestMessages.length} contacts available
+                  {latestMessages.length} contacts available 
+                  {/* • {Object.values(onlineStatus).filter(status => status.status === 'online').length} online */}
                 </p>
               </div>
             </div>
@@ -758,6 +797,9 @@ export default function ChatPage() {
               <p className="text-gray-500 mb-4 text-center">
                 Select a contact from the sidebar to start chatting
               </p>
+              <div className="text-sm text-gray-400">
+                {Object.values(onlineStatus).filter(status => status.status === 'online').length} contacts online
+              </div>
             </div>
           )}
         </div>
