@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import useAuth from '@/hooks/useAuth';
 import Header from '@/components/layout/Header';
 import Sidebar from '@/components/layout/Sidebar';
+import Chatbot from '@/components/ui/chatBot';
 
 export default function DashboardLayout({ children }) {
   const { user, loading } = useAuth();
@@ -39,13 +40,6 @@ export default function DashboardLayout({ children }) {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Mobile Overlay */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={closeSidebar}
-        />
-      )}
 
       {/* Sidebar */}
       <Sidebar 
@@ -65,6 +59,8 @@ export default function DashboardLayout({ children }) {
           </div>
         </main>
       </div>
+
+      <Chatbot />
     </div>
   );
 }

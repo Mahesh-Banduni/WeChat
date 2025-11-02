@@ -32,24 +32,24 @@ export const SocketProvider = ({ children }) => {
       console.log('Socket disconnected');
     };
 
-    // ✅ Global: Show toast when someone accepts your invite
-    const handleAcceptedInvite = (invite) => {
-      if (invite.senderId === user.userId) {
-        successToast(`Congratulations!!🎉🎉 ${invite.receiver?.name} accepted your invite!`, () => router.push('/dashboard/chat') );
-      }
-    };
+    // // ✅ Global: Show toast when someone accepts your invite
+    // const handleAcceptedInvite = (invite) => {
+    //   if (invite.senderId === user.userId) {
+    //     successToast(`Congratulations!! ${invite.receiver?.name} accepted your invite!`, () => router.push('/dashboard/chat') );
+    //   }
+    // };
 
-    // ✅ Global: Show toast when someone sends you an invite
-    const handleNewInvite = (invite) => {
-      if (invite.receiverId === user.userId) {
-        successToast(`Hello👋👋 New invite from ${invite.sender?.name}`, () => router.push('/dashboard/invites'));
-      }
-    };
+    // // ✅ Global: Show toast when someone sends you an invite
+    // const handleNewInvite = (invite) => {
+    //   if (invite.receiverId === user.userId) {
+    //     successToast(`Hello New invite from ${invite.sender?.name}`, () => router.push('/dashboard/invites'));
+    //   }
+    // };
 
     socketInstance.on('connect', handleConnect);
     socketInstance.on('disconnect', handleDisconnect);
-    socketInstance.on('accepted_invite', handleAcceptedInvite);
-    socketInstance.on('new_invite', handleNewInvite);
+    //socketInstance.on('accepted_invite', handleAcceptedInvite);
+    //socketInstance.on('new_invite', handleNewInvite);
 
     setSocket(socketInstance);
 
@@ -57,8 +57,8 @@ export const SocketProvider = ({ children }) => {
     return () => {
       socketInstance.off('connect', handleConnect);
       socketInstance.off('disconnect', handleDisconnect);
-      socketInstance.off('accepted_invite', handleAcceptedInvite);
-      socketInstance.off('new_invite', handleNewInvite);
+      //socketInstance.off('accepted_invite', handleAcceptedInvite);
+      //socketInstance.off('new_invite', handleNewInvite);
       socketInstance.disconnect();
     };
   }, [user?.userId, loading]);

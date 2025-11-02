@@ -1,7 +1,8 @@
 // src/socket/socket-server.js
 import { initializeSocket } from './socket-instance.js';
 import { PrismaClient } from '@prisma/client';
-import connectionService from "../services/connection.service.js";
+import connectionService from "../modules/connection/connection.service.js";
+import redisClient from '../utils/redisClient.js';
 
 const prisma = new PrismaClient();
 const SOCKET_PORT = process.env.SOCKET_PORT || 8080;
@@ -27,36 +28,40 @@ initializeSocket(SOCKET_PORT).then((io) => {
         socket.emit('new_message', message);
       } else {
         // Save and emit (for potential fallback/internal use)
-        const savedMessage = await prisma.message.create({
-          data: { senderId, receiverId, content, status: 'SENT' }
-        });
-        socket.to(receiverId).emit('new_message', savedMessage);
-        socket.emit('new_message', savedMessage);
+        // const savedMessage = await prisma.message.create({
+        //   data: { senderId, receiverId, content, status: 'SENT' }
+        // });
+        // Queue the message in Redis instead of saving to DB
+
+        await redisClient.rpush('chat:message:queue', JSON.stringify(message));
+        socket.to(receiverId).emit('new_message', message);
+        socket.emit('new_message', message);
       }
     });
 
     // Handle message sent confirmation (for status updates)
     socket.on('message_sent', async (data) => {
       const { messageId, receiverId } = data;
-      
+      const statusUpdate = {
+        messageId,
+        status: 'DELIVERED'
+      };
+
       try {
         // Update message status to DELIVERED
-        const updatedMessage = await prisma.message.update({
-          where: { messageId },
-          data: { status: 'DELIVERED' }
-        });
+        // const updatedMessage = await prisma.message.update({
+        //   where: { messageId },
+        //   data: { status: 'DELIVERED' }
+        // });
+
+         // Queue the update
+        await redisClient.rpush('chat:status:queue', JSON.stringify(statusUpdate));
 
         // Emit status update to sender
-        socket.emit('message_status_update', {
-          messageId,
-          status: 'DELIVERED'
-        });
+        socket.emit('message_status_update', JSON.stringify(statusUpdate));
 
         // Emit to receiver as well for their UI
-        socket.to(receiverId).emit('message_status_update', {
-          messageId,
-          status: 'DELIVERED'
-        });
+        socket.to(receiverId).emit('message_status_update', JSON.stringify(statusUpdate));
 
       } catch (error) {
         console.error('Error updating message status:', error);
@@ -69,24 +74,29 @@ initializeSocket(SOCKET_PORT).then((io) => {
       
       try {
         // Update all unread messages from sender to receiver
-        const updatedMessages = await prisma.message.updateMany({
-          where: {
-            senderId: senderId,
-            receiverId: receiverId,
-            status: { in: ['SENT', 'DELIVERED'] }
-          },
-          data: {
-            status: 'READ',
-          }
-        });
+        // const updatedMessages = await prisma.message.updateMany({
+        //   where: {
+        //     senderId: senderId,
+        //     receiverId: receiverId,
+        //     status: { in: ['SENT', 'DELIVERED'] }
+        //   },
+        //   data: {
+        //     status: 'READ',
+        //   }
+        // });
 
-        if (updatedMessages.count > 0) {
+        const readUpdate = {
+          senderId,
+          receiverId,
+          readAt: new Date().toISOString()
+        };
+
+        // Queue the update
+        await redisClient.rpush('chat:read:queue', JSON.stringify(readUpdate));
+
+        if (readUpdate.count > 0) {
           // Emit read confirmation to sender
-          socket.to(senderId).emit('messages_read', {
-            senderId,
-            receiverId,
-            readAt: readAt.toISOString()
-          });
+          socket.to(senderId).emit('messages_read', readUpdate);
 
           // Get updated messages for status update
           const readMessages = await prisma.message.findMany({
@@ -103,6 +113,7 @@ initializeSocket(SOCKET_PORT).then((io) => {
           readMessages.forEach(msg => {
             socket.to(senderId).emit('message_status_update', {
               messageId: msg.messageId,
+              readAt: readAt,
               status: 'READ',
             });
           });
@@ -153,63 +164,79 @@ initializeSocket(SOCKET_PORT).then((io) => {
       });
     });
 
-    socket.on('send_invite', async (data) => {
-      const { senderId, email, fromApi, invite } = data;
+    // socket.on('send_invite', async (data) => {
+    //   const { senderId, email, fromApi, invite, notification } = data;
       
-      try {
-        const receiver = await prisma.user.findFirst({
-          where: { email },
-        });
+    //   try {
+    //     const receiver = await prisma.user.findFirst({
+    //       where: { email },
+    //     });
       
-        if (!receiver) {
-          socket.emit('invite_error', { message: 'User not found' });
-          return;
-        }
+    //     if (!receiver) {
+    //       socket.emit('invite_error', { message: 'User not found' });
+    //       return;
+    //     }
 
-        const receiverId = receiver.userId; 
+    //     const receiverId = receiver.userId; 
 
-        if (fromApi && invite) {
-          // API already saved it, just emit
-          socket.to(receiverId).emit('new_invite', invite);
-        } else {
-          // Save and emit (for potential fallback/internal use)
-          const savedInvite = await connectionService.sendInvite(senderId, email);
-          socket.to(receiverId).emit('new_invite', savedInvite);
-        }
-      } catch (error) {
-        console.error('Error sending invite:', error);
-        socket.emit('invite_error', { message: 'Failed to send invite' });
-      }
-    });
+    //     if (fromApi && invite) {
+    //       // API already saved it, just emit
+    //       //socket.to(receiverId).emit('new_invite', invite);
+    //       socket.to(receiverId).emit('new_notification', notification);
+    //       const title="New invite";
+    //       const body=notification.message;
+    //       sendPushNotification(receiverId, title, body);
+    //     } else {
+    //       // Save and emit (for potential fallback/internal use)
+    //       const {invite, notification} = await connectionService.sendInvite(senderId, email);
+    //       //socket.to(receiverId).emit('new_invite', {invite, notification});
+    //       socket.to(receiverId).emit('new_notification', notification);
+    //       const title="New invite";
+    //       const body=notification.message;
+    //       sendPushNotification(receiverId, title, body);
+    //     }
+    //   } catch (error) {
+    //     console.error('Error sending invite:', error);
+    //     socket.emit('invite_error', { message: 'Failed to send invite' });
+    //   }
+    // });
 
-    socket.on('accept_invite', async (data) => {
-      const { inviteId, userId, fromApi, invite } = data;
+    // socket.on('accept_invite', async (data) => {
+    //   const { inviteId, userId, fromApi, invite, notification } = data;
 
-      try {
-        const existingInvite = await prisma.invite.findUnique({
-          where: { inviteId },
-        });
+    //   try {
+    //     const existingInvite = await prisma.invite.findUnique({
+    //       where: { inviteId },
+    //     });
 
-        if (!existingInvite) {
-          socket.emit('invite_error', { message: 'Invite not found' });
-          return;
-        }
+    //     if (!existingInvite) {
+    //       socket.emit('invite_error', { message: 'Invite not found' });
+    //       return;
+    //     }
       
-        const senderId = existingInvite.senderId; 
+    //     const senderId = existingInvite.senderId; 
 
-        if (fromApi && invite) {
-          // API already saved it, just emit
-          socket.to(senderId).emit('accepted_invite', invite);
-        } else {
-          // Save and emit (for potential fallback/internal use)
-          const savedInvite = await connectionService.acceptInvite(inviteId, userId);
-          socket.to(senderId).emit('accepted_invite', savedInvite);
-        }
-      } catch (error) {
-        console.error('Error accepting invite:', error);
-        socket.emit('invite_error', { message: 'Failed to accept invite' });
-      }
-    });
+    //     if (fromApi && invite) {
+    //       // API already saved it, just emit
+    //       //socket.to(senderId).emit('accepted_invite', invite);
+    //       socket.to(senderId).emit('new_notification', notification);
+    //       const title="Invitation accepted";
+    //       const body=notification.message;
+    //       sendPushNotification(senderId, title, body);
+    //     } else {
+    //       // Save and emit (for potential fallback/internal use)
+    //       const {invite, notification} = await connectionService.acceptInvite(inviteId, userId);
+    //       //socket.to(senderId).emit('accepted_invite', invite);
+    //       socket.to(senderId).emit('new_notification', notification);
+    //       const title="Invitation accepted";
+    //       const body=notification.message;
+    //       sendPushNotification(senderId, title, body);
+    //     }
+    //   } catch (error) {
+    //     console.error('Error accepting invite:', error);
+    //     socket.emit('invite_error', { message: 'Failed to accept invite' });
+    //   }
+    // });
 
     // Handle disconnect
     socket.on('disconnect', () => {

@@ -1,11 +1,26 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { UserPlus, Mail, User, Check, Clock, Send, Users, Heart } from 'lucide-react';
+import { UserPlus, Mail, User, Check, Clock, Send, Users, Heart, X } from 'lucide-react';
 import useAuth from '@/hooks/useAuth';
 import api from '@/lib/api';
 import { successToast, errorToast } from '@/components/ui/toast';
 import { useSocket } from '@/providers/socket-provider';
+
+export const handleInvite = async (inviteId, {status}) => {
+    try {
+      const response = await api.post(`/connection/handle-invite/${inviteId}`, { status});
+      if(response.status===200){
+        successToast(response?.data?.message);
+        await fetchInvites();
+      }
+      await fetchInvites();
+      errorToast(response?.data?.error);
+    } catch (error) {
+      errorToast(error.response?.data?.error);
+      //console.error('Error accepting invite:', error);
+    }
+};
 
 export default function InvitesPage() {
   const { user } = useAuth();
@@ -31,7 +46,7 @@ export default function InvitesPage() {
   };
 
   // Only needed if you want to update state when invite is accepted
-  const handleAcceptedInvite = (acceptedInvite) => {
+  const handleAcceptInvite = (acceptedInvite) => {
     setInvites(prev => prev.map(inv =>
       inv.inviteId === acceptedInvite.inviteId
         ? { ...inv, status: 'ACCEPTED' }
@@ -41,7 +56,7 @@ export default function InvitesPage() {
   };
 
   socket.on("new_invite", handleNewInvite);
-  socket.on("accepted_invite", handleAcceptedInvite);
+  socket.on("accepted_invite", handleAcceptInvite);
 
     return () => {
       // socket.off('new_invite');
@@ -89,9 +104,9 @@ export default function InvitesPage() {
     }
   };
 
-  const handleAcceptInvite = async (inviteId) => {
+  const handleInvite = async (inviteId, {status}) => {
     try {
-      const response = await api.post(`/connection/accept-invite/${inviteId}`);
+      const response = await api.post(`/connection/handle-invite/${inviteId}`, { status});
       if(response.status===200){
         successToast(response?.data?.message);
         await fetchInvites();
@@ -241,11 +256,18 @@ export default function InvitesPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => handleAcceptInvite(invite.inviteId)}
+                    onClick={() => handleInvite(invite.inviteId, {status: 'ACCEPTED'})}
                     className="bg-emerald-400 hover:bg-emerald-500 text-white px-6 py-3 lg:px-8 lg:py-3 rounded-xl font-medium flex items-center justify-center space-x-2 transition-colors duration-200 shadow-sm hover:shadow-md active:scale-98 w-full sm:w-auto text-sm md:text-sm lg:text-sm xl:text-sm"
                   >
                     <Check className="w-4 h-4 lg:w-5 lg:h-5" />
                     <span>Accept</span>
+                  </button>
+                  <button
+                    onClick={() => handleInvite(invite.inviteId, {status: 'REJECTED'})}
+                    className="bg-red-400 hover:bg-red-500 text-white px-6 py-3 lg:px-8 lg:py-3 rounded-xl font-medium flex items-center justify-center space-x-2 transition-colors duration-200 shadow-sm hover:shadow-md active:scale-98 w-full sm:w-auto text-sm md:text-sm lg:text-sm xl:text-sm"
+                  >
+                    <X className="w-4 h-4 lg:w-5 lg:h-5" />
+                    <span>Reject</span>
                   </button>
                 </div>
               ))}

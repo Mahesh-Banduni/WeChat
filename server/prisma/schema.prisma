@@ -13,6 +13,7 @@ model User {
   password       String
   name           String
   createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   sentInvites    Invite[]     @relation("SentInvites")
   receivedInvites Invite[]    @relation("ReceivedInvites")
   connectionsA   Connection[] @relation("ConnectionA")
@@ -28,9 +29,12 @@ model Invite {
   receiverId  String
   status      InviteStatus @default(PENDING)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   sender      User     @relation("SentInvites", fields: [senderId], references: [userId])
   receiver    User     @relation("ReceivedInvites", fields: [receiverId], references: [userId])
+
+  notifications Notification[]
 }
 
 enum InviteStatus {
@@ -44,6 +48,7 @@ model Connection {
   userAId   String
   userBId   String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   userA     User     @relation("ConnectionA", fields: [userAId], references: [userId])
   userB     User     @relation("ConnectionB", fields: [userBId], references: [userId])
@@ -55,7 +60,11 @@ model Message {
   receiverId  String
   content     String
   status      MessageStatus @default(SENT)
+  type        MessageType   @default(TEXT)
+  deletedFor  String?
+  readAt      DateTime?
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   sender      User     @relation("MessagesSent", fields: [senderId], references: [userId])
   receiver    User     @relation("MessagesReceived", fields: [receiverId], references: [userId])
@@ -68,6 +77,9 @@ model Notification {
   message        String
   isRead         Boolean  @default(false)
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  inviteId       String?    
+  invite         Invite?    @relation(fields: [inviteId], references: [inviteId])
 
   user           User     @relation(fields: [userId], references: [userId])
 }
@@ -85,3 +97,58 @@ enum MessageStatus {
   READ
 }
 
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  FILE
+}
+
+model ChatSession {
+  chatSessionId     String   @id @default(uuid())
+  userId     String
+  title      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  metadata   Json?
+  messages   ChatMessage[]
+  summaries  ChatSessionSummary[]
+}
+
+model ChatMessage {
+  id         String   @id
+  chatSessionId  String
+  session    ChatSession @relation(fields: [chatSessionId], references: [chatSessionId])
+  role       String
+  content    Json
+  createdAt  DateTime @default(now())
+
+  @@index([chatSessionId, createdAt])
+}
+
+model ChatSessionSummary {
+  id           String   @id
+  chatSessionId    String
+  session      ChatSession @relation(fields: [chatSessionId], references: [chatSessionId], onDelete: Cascade)
+  summary      String
+  atMessageId  String
+  createdAt    DateTime @default(now())
+}
+
+model FaqCategory {
+  faqCategoryId      Int        @id @default(autoincrement()) @map("faq_category_id")
+  title      String     @map("title")
+  faqs            Faq[]
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt     @map("updated_at")
+}
+
+model Faq {
+  faqId      Int        @id @default(autoincrement()) @map("faq_id")
+  question   String     @map("question")
+  answer     String     @map("answer")
+  faqCategory FaqCategory @relation(fields: [faqCategoryId], references: [faqCategoryId])
+  faqCategoryId  Int      @map("faq_category_id")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt     @map("updated_at")
+}

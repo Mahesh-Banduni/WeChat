@@ -156,7 +156,7 @@ export default function Sidebar({ isOpen, onClose }) {
               
               return (
                 <Link
-                  key={item.href}
+                  key={item.label}
                   href={item.href}
                   onClick={handleLinkClick}
                   className={`
